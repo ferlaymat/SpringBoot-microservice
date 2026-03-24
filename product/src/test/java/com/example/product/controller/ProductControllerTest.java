@@ -204,5 +204,5 @@ public class ProductControllerTest {
                 .isOk());
         verify(productService).deleteProductList(List.of(1L,2L));
     }
-    
+
 }

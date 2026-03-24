@@ -11,6 +11,7 @@ public interface ProductService {
 
     Product createProduct(Product product);
     Product getProduct(Long id);
+    List<Product> getProductList(List<Long> idList);
     Product getProductByName(String name);
     List<Product> getProductByCategory(Category ctg);
     List<Product> getProductByPriceBetween(BigDecimal minPrice, BigDecimal maxPrice);

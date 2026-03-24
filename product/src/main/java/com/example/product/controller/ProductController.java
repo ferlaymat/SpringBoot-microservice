@@ -35,6 +35,12 @@ public class ProductController {
         return ResponseEntity.ok(productService.getProduct(id));
     }
 
+    @PostMapping("/list")
+    @Operation(description = "Fetch list of products from database by their ids")
+    public ResponseEntity<List<Product>> getProductList(@Parameter(description = "Id of a specific product") @RequestBody List<Long> idList){
+        return ResponseEntity.ok(productService.getProductList(idList));
+    }
+
     @GetMapping("/name/{name}")
     @Operation(description = "Fetch a product from database by its name")
     public ResponseEntity<Product> getProductByName(@Parameter(description = "Name of a specific product") @PathVariable("name") String name){
