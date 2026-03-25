@@ -7,10 +7,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.ToString;
+import lombok.*;
 import org.hibernate.annotations.DynamicUpdate;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -21,8 +18,9 @@ import java.util.Set;
 
 @NoArgsConstructor
 @AllArgsConstructor
-@Data
-@ToString
+@Getter
+@Setter
+@ToString(exclude = "orderItemSet")
 @DynamicUpdate
 @EntityListeners(AuditingEntityListener.class)// needed to use @CreatedDate
 @Entity

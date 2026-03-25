@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+@Transactional
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/v1/product")
@@ -114,5 +116,11 @@ public class ProductController {
     @Operation(description = "Reserve specific quantity of products")
     public ResponseEntity<List<Product>> reserveStock(@Parameter(description = "Map of quantity by product id") @RequestBody Map<Long,Integer> reservationMap){
         return ResponseEntity.ok(productService.reserveStock(reservationMap));
+    }
+
+    @PutMapping("/cancel")
+    @Operation(description = "Return specific quantity of products after order cancellation")
+    public ResponseEntity<List<Product>> cancelStock(@Parameter(description = "Map of quantity by product id") @RequestBody Map<Long,Integer> reservationMap){
+        return ResponseEntity.ok(productService.cancelStock(reservationMap));
     }
 }

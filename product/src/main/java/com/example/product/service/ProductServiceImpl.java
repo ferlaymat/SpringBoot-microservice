@@ -93,7 +93,9 @@ public class ProductServiceImpl implements ProductService{
     public List<Product> reserveStock(Map<Long, Integer> reservationMap) {
         List<Long> idList = reservationMap.keySet().stream().toList();
         List<Product> productList = getProductList(idList);
-
+        if (productList == null || productList.size() < idList.size()) {
+            throw new IllegalStateException("Error: One or more orderItems do not exist in product list");
+        }
         for (Map.Entry<Long, Integer>item : reservationMap.entrySet()) {
             Product product = productList.stream().filter(p -> p.getId() == item.getKey()).findFirst().get();
             if (item.getValue() > product.getStock()) {
@@ -103,6 +105,21 @@ public class ProductServiceImpl implements ProductService{
             }
             //update new item's quantity
             product.setStock(product.getStock() - item.getValue());
+        }
+        return updateProductList(productList);
+    }
+
+    @Override
+    public List<Product> cancelStock(Map<Long, Integer> reservationMap) {
+        List<Long> idList = reservationMap.keySet().stream().toList();
+        List<Product> productList = getProductList(idList);
+        if (productList == null || productList.size() < idList.size()) {
+            throw new IllegalStateException("Error: One or more orderItems do not exist in product list");
+        }
+        for (Map.Entry<Long, Integer>item : reservationMap.entrySet()) {
+            Product product = productList.stream().filter(p -> p.getId() == item.getKey()).findFirst().get();
+            //update new item's quantity
+            product.setStock(product.getStock() + item.getValue());
         }
         return updateProductList(productList);
     }

@@ -39,4 +39,5 @@ public interface ProductService {
     void deleteProductList(List<Long> idList);
 
     List<Product> reserveStock(Map<Long, Integer> reservationMap);
+    List<Product> cancelStock(Map<Long, Integer> reservationMap);
 }
