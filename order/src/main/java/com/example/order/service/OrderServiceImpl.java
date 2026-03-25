@@ -16,10 +16,11 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
-import java.util.Set;
+import java.math.BigDecimal;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -31,12 +32,16 @@ public class OrderServiceImpl implements OrderService {
     private final RestTemplate restTemplate;
 
 
+    @Transactional
     @Override
     public Order createOrder(CustomerOrder customerOrder) {
+        Map<Long, Integer> orderMap = customerOrder.orderItemMap();
         //call product to validate and reserve stock
+        Set<OrderItem> itemList = validAndReserveItems(orderMap);
         //compute amount
+        BigDecimal amount = itemList.stream().map(o -> o.getUnityPrice().multiply(BigDecimal.valueOf(o.getQuantity()))).reduce(BigDecimal::add).orElse(new BigDecimal(0));
         //persist order
-        return null;
+        return orderRepository.save(new Order(null, itemList, customerOrder.email(), OrderStatus.PENDING, amount, null, null));
     }
 
     @Override
@@ -67,8 +72,31 @@ public class OrderServiceImpl implements OrderService {
 
     }
 
-    private boolean reserveItems(Set<OrderItem> orderItemSet) {
-        List<Long> idList = orderItemSet.stream().map(OrderItem::getId).collect(Collectors.toList());
+    private Set<OrderItem> validAndReserveItems(Map<Long, Integer> orderMap) {
+        //query product list by ids to validate the stock availability
+        List<ProductDto> productList = getProductList(orderMap.keySet().stream().toList());
+        //call product service to update stock
+        HttpEntity<Map<Long, Integer>> body = new HttpEntity<>(orderMap);
+        ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
+        };
+        restTemplate.exchange("http://localhost:8081/api/v1/product/reserve", HttpMethod.PUT, body, typeRef);
+        List<ProductDto> updatedProdList = new ArrayList<>();
+        //if stock is ok, we create list of items
+        Set<OrderItem> orderItemList = new HashSet<>();
+        for (Map.Entry<Long,Integer> oi : orderMap.entrySet()) {
+            ProductDto prod = productList.stream().filter(p -> p.id() == oi.getKey()).findFirst().get();
+            orderItemList.add(new OrderItem(null, null, prod.id(), prod.name(), prod.price(), oi.getValue()));
+        }
+        return orderItemList;
+    }
+
+    /**
+     * Fetch a list of products from product-service then validate the quantity available
+     *
+     * @param idList Id list of required items from the order
+     * @return List of products
+     */
+    private List<ProductDto> getProductList(List<Long> idList) {
         HttpEntity<List<Long>> body = new HttpEntity<>(idList);
         ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
         };
@@ -77,21 +105,21 @@ public class OrderServiceImpl implements OrderService {
         if (productList == null || productList.size() < idList.size()) {
             throw new IllegalStateException("Error: One or more orderItems do not exist in product list");
         }
-
-        for (OrderItem o : orderItemSet) {
-            ProductDto prod = productList.stream().filter(p -> p.id() == o.getId()).findFirst().get();
-            if (o.getQuantity() > prod.stock()) {
-                log.info("Not enough quantity available");
-                throw new IllegalStateException(String.format("Error: Not enough quantity available: {id:%s, available:%s, required:%s}", o.getId(), o.getUnityPrice(), prod.id(), prod.price()));
-            }
-        }
-        //TODO call product service to update stock
-        return true;
+        return productList;
     }
 
-    private PageRequest getPageable(int page, int size, String sorBy, String sortOrder) {
+    /**
+     * Prepare the pageRequest for the query.
+     *
+     * @param page      starting page
+     * @param size      number of elements per page
+     * @param sortBy    fields used to sort
+     * @param sortOrder order of sort (asc/desc)
+     * @return a page request
+     */
+    private PageRequest getPageable(int page, int size, String sortBy, String sortOrder) {
         var sort = sortOrder.equalsIgnoreCase("Desc") ?
-                Sort.by(sorBy).descending() : Sort.by(sorBy).ascending();
+                Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
         var pageable = PageRequest.of(page, size, sort);
         return pageable;
     }

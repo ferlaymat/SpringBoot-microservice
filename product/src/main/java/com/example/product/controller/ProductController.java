@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @RequiredArgsConstructor
 @RestController
@@ -109,4 +110,9 @@ public class ProductController {
         return ResponseEntity.ok().build();
     }
 
+    @PutMapping("/reserve")
+    @Operation(description = "Reserve specific quantity of products")
+    public ResponseEntity<List<Product>> reserveStock(@Parameter(description = "Map of quantity by product id") @RequestBody Map<Long,Integer> reservationMap){
+        return ResponseEntity.ok(productService.reserveStock(reservationMap));
+    }
 }

@@ -4,12 +4,15 @@ import com.example.product.entity.Product;
 import com.example.product.repository.ProductRepository;
 import com.example.product.type.Category;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @RequiredArgsConstructor
 @Service
 public class ProductServiceImpl implements ProductService{
@@ -84,5 +87,23 @@ public class ProductServiceImpl implements ProductService{
     @Override
     public void deleteProductList(List<Long> idList) {
         productRepository.deleteAllById(idList);
+    }
+
+    @Override
+    public List<Product> reserveStock(Map<Long, Integer> reservationMap) {
+        List<Long> idList = reservationMap.keySet().stream().toList();
+        List<Product> productList = getProductList(idList);
+
+        for (Map.Entry<Long, Integer>item : reservationMap.entrySet()) {
+            Product product = productList.stream().filter(p -> p.getId() == item.getKey()).findFirst().get();
+            if (item.getValue() > product.getStock()) {
+                log.info("Not enough quantity available");
+                throw new IllegalStateException(
+                        String.format("Error: Not enough quantity available: {id:%s, available:%s, required:%s}", product.getId(), product.getStock(), item.getKey(), item.getValue()));
+            }
+            //update new item's quantity
+            product.setStock(product.getStock() - item.getValue());
+        }
+        return updateProductList(productList);
     }
 }
