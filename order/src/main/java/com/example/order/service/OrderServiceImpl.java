@@ -14,11 +14,15 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -32,6 +36,10 @@ public class OrderServiceImpl implements OrderService {
 
 
     @Override
+    @Retryable(maxRetries = 3, //3 retry
+            delay = 500, //0.5s
+            multiplier = 2.0 //0.5s, 1s, 2s
+    )
     public Order createOrder(CustomerOrder customerOrder) {
         Map<Long, Integer> orderMap = customerOrder.orderItemMap();
         //call product to validate and reserve stock
@@ -44,6 +52,7 @@ public class OrderServiceImpl implements OrderService {
         itemList.forEach(item -> item.setOrder(order));
         return orderRepository.save(order);
     }
+
 
     @Override
     public Order getOrderById(Long id) {
@@ -71,6 +80,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Retryable(maxRetries = 3, //3 retry
+            delay = 500, //0.5s
+            multiplier = 2.0 //0.5s, 1s, 2s
+    )
     public void cancelOrder(Long id) {
         //fetch all orderitems for this order
         List<OrderItem> orderItemList = this.orderItemService.findAllByOrderId(id);
