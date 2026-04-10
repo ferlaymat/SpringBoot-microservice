@@ -1,9 +1,12 @@
 package com.example.order.service;
 
+import com.example.common.event.object.PaymentCompletedEvent;
+import com.example.common.event.object.PaymentFailedEvent;
 import com.example.order.dto.CustomerOrder;
 import com.example.order.dto.ProductDto;
 import com.example.order.entity.Order;
 import com.example.order.entity.OrderItem;
+import com.example.order.event.publisher.OrderEventPublisher;
 import com.example.order.repository.OrderRepository;
 import com.example.order.type.OrderStatus;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +17,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -33,6 +37,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemService orderItemService;
     private final RestTemplate restTemplate;
+    private final OrderEventPublisher orderEventPublisher;
 
 
     @Override
@@ -50,7 +55,32 @@ public class OrderServiceImpl implements OrderService {
         Order order = new Order(null, itemList, customerOrder.email(), OrderStatus.PENDING, amount, null, null);
         // Synchronize order and orderItem
         itemList.forEach(item -> item.setOrder(order));
-        return orderRepository.save(order);
+        Order savedOrder =  orderRepository.save(order);
+        //publish the event then return immediately
+        this.orderEventPublisher.publishOrderCreated(savedOrder);
+        return savedOrder;
+    }
+
+    @KafkaListener(topics = "${kafka.topics.payment-completed}",
+            groupId = "order-group")
+    public void onPaymentCompleted(PaymentCompletedEvent event) {
+        Order order = orderRepository.findById(event.getOrderId())
+                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found",event.getOrderId())));
+        //payment is successful. We validate the order
+        order.setStatus(OrderStatus.CONFIRMED);
+        orderRepository.save(order);
+    }
+
+    @KafkaListener(topics = "${kafka.topics.payment-failed}",
+            groupId = "order-group")
+    public void onPaymentFailed(PaymentFailedEvent event) {
+        Order order = orderRepository.findById(event.getOrderId())
+                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found",event.getOrderId())));
+        //payment is unsuccessful. We invalidate the order
+        order.setStatus(OrderStatus.CANCELLED);
+        orderRepository.save(order);
+        //we need to release reserved stock
+        cancelOrder(order.getId());
     }
 
 
@@ -92,7 +122,7 @@ public class OrderServiceImpl implements OrderService {
         HttpEntity<Map<Long, Integer>> body = new HttpEntity<>(cancelMap);
         ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
         };
-        restTemplate.exchange("http://localhost:8081/api/v1/product/cancel", HttpMethod.PUT, body, typeRef).getBody();
+        restTemplate.exchange("http://PRODUCT/api/v1/product/cancel", HttpMethod.PUT, body, typeRef).getBody();
 
         //change status order
         updateOrderStatus(id, OrderStatus.CANCELLED);
@@ -110,7 +140,7 @@ public class OrderServiceImpl implements OrderService {
         HttpEntity<Map<Long, Integer>> body = new HttpEntity<>(orderMap);
         ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
         };
-        List<ProductDto> productList = restTemplate.exchange("http://localhost:8081/api/v1/product/reserve", HttpMethod.PUT, body, typeRef).getBody();
+        List<ProductDto> productList = restTemplate.exchange("http://PRODUCT/api/v1/product/reserve", HttpMethod.PUT, body, typeRef).getBody();
         //if stock is ok, we create list of items
         Set<OrderItem> orderItemList = new HashSet<>();
         for (Map.Entry<Long, Integer> oi : orderMap.entrySet()) {
