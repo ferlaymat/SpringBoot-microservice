@@ -37,7 +37,7 @@ public class Order {
 
     @NotBlank(message = "Customer email is mandatory")
     @Size(max = 100, message = "Customer email size must not exceed 100 car.")
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, unique = false, length = 100)
     private String customerEmail;
 
     @Enumerated(EnumType.STRING)
