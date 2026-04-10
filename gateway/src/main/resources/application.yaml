@@ -1,0 +1,63 @@
+spring:
+  application:
+    name: gateway
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  cloud:
+    gateway:
+      # activate auto detection
+      discovery:
+
+            locator:
+              enabled: true
+              lower-case-service-id: true   # PRODUCT-SERVICE → product-service
+
+#      routes:
+#            # --- product ---
+#              - id: product
+#                uri: lb://PRODUCT      # lb:// = load balanced via Eureka
+#                predicates:
+#                  - Path=/api/v1/product/**
+#                filters:
+#                 - name: RequestRateLimiter
+#                   args:
+#                     redis-rate-limiter.replenishRate: 20
+#                     redis-rate-limiter.burstCapacity: 40
+#                     redis-rate-limiter.requestedTokens: 1
+#                     key-resolver: "#{@ipKeyResolver}"
+#                 - name: CircuitBreaker
+#                   args:
+#                     name: product-service-cb
+#                     fallbackUri: forward:/fallback/product
+#
+#            # --- order ---
+#              - id: order
+#                uri: lb://ORDER
+#                predicates:
+#                  - Path=/api/v1/order/**
+#                filters:
+#                  - name: RequestRateLimiter
+#                    args:
+#                      redis-rate-limiter.replenishRate: 10
+#                      redis-rate-limiter.burstCapacity: 20
+#                      redis-rate-limiter.requestedTokens: 1
+#                      key-resolver: "#{@ipKeyResolver}"
+#                  - name: CircuitBreaker
+#                    args:
+#                      name: order-service-cb
+#                      fallbackUri: forward:/fallback/order
+
+
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+server:
+  port: 8080

@@ -122,7 +122,7 @@ public class OrderServiceImpl implements OrderService {
         HttpEntity<Map<Long, Integer>> body = new HttpEntity<>(cancelMap);
         ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
         };
-        restTemplate.exchange("http://localhost:8081/api/v1/product/cancel", HttpMethod.PUT, body, typeRef).getBody();
+        restTemplate.exchange("http://PRODUCT/api/v1/product/cancel", HttpMethod.PUT, body, typeRef).getBody();
 
         //change status order
         updateOrderStatus(id, OrderStatus.CANCELLED);
@@ -140,7 +140,7 @@ public class OrderServiceImpl implements OrderService {
         HttpEntity<Map<Long, Integer>> body = new HttpEntity<>(orderMap);
         ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
         };
-        List<ProductDto> productList = restTemplate.exchange("http://localhost:8081/api/v1/product/reserve", HttpMethod.PUT, body, typeRef).getBody();
+        List<ProductDto> productList = restTemplate.exchange("http://PRODUCT/api/v1/product/reserve", HttpMethod.PUT, body, typeRef).getBody();
         //if stock is ok, we create list of items
         Set<OrderItem> orderItemList = new HashSet<>();
         for (Map.Entry<Long, Integer> oi : orderMap.entrySet()) {

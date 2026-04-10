@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  client:
+    register-with-eureka: false   # Do not register itself
+    fetch-registry: false         # Do not fetch its own registery
+  server:
+    wait-time-in-ms-when-sync-empty: 0   # Start immediately - in dev
+    enable-self-preservation: false  #avoid false positive - disable in dev
+
+server:
+  port: 8761
