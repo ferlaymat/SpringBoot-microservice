@@ -16,11 +16,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
@@ -36,7 +35,7 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderItemService orderItemService;
-    private final RestTemplate restTemplate;
+    private final RestClient restClient;
     private final OrderEventPublisher orderEventPublisher;
 
 
@@ -55,7 +54,7 @@ public class OrderServiceImpl implements OrderService {
         Order order = new Order(null, itemList, customerOrder.email(), OrderStatus.PENDING, amount, null, null);
         // Synchronize order and orderItem
         itemList.forEach(item -> item.setOrder(order));
-        Order savedOrder =  orderRepository.save(order);
+        Order savedOrder = orderRepository.save(order);
         //publish the event then return immediately
         this.orderEventPublisher.publishOrderCreated(savedOrder);
         return savedOrder;
@@ -65,7 +64,7 @@ public class OrderServiceImpl implements OrderService {
             groupId = "order-group")
     public void onPaymentCompleted(PaymentCompletedEvent event) {
         Order order = orderRepository.findById(event.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found",event.getOrderId())));
+                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
         //payment is successful. We validate the order
         order.setStatus(OrderStatus.CONFIRMED);
         orderRepository.save(order);
@@ -75,7 +74,7 @@ public class OrderServiceImpl implements OrderService {
             groupId = "order-group")
     public void onPaymentFailed(PaymentFailedEvent event) {
         Order order = orderRepository.findById(event.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found",event.getOrderId())));
+                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
         //payment is unsuccessful. We invalidate the order
         order.setStatus(OrderStatus.CANCELLED);
         orderRepository.save(order);
@@ -122,7 +121,8 @@ public class OrderServiceImpl implements OrderService {
         HttpEntity<Map<Long, Integer>> body = new HttpEntity<>(cancelMap);
         ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
         };
-        restTemplate.exchange("http://PRODUCT/api/v1/product/cancel", HttpMethod.PUT, body, typeRef).getBody();
+        restClient.put().uri("http://PRODUCT/api/v1/product/cancel")
+                .body(typeRef).retrieve().body(List.class);
 
         //change status order
         updateOrderStatus(id, OrderStatus.CANCELLED);
@@ -140,7 +140,8 @@ public class OrderServiceImpl implements OrderService {
         HttpEntity<Map<Long, Integer>> body = new HttpEntity<>(orderMap);
         ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
         };
-        List<ProductDto> productList = restTemplate.exchange("http://PRODUCT/api/v1/product/reserve", HttpMethod.PUT, body, typeRef).getBody();
+        List<ProductDto> productList = restClient.put().uri("http://PRODUCT/api/v1/product/reserve")
+                .body(typeRef).retrieve().body(List.class);
         //if stock is ok, we create list of items
         Set<OrderItem> orderItemList = new HashSet<>();
         for (Map.Entry<Long, Integer> oi : orderMap.entrySet()) {
