@@ -3,9 +3,11 @@ package com.example.product.service;
 import com.example.product.entity.Product;
 import com.example.product.repository.ProductRepository;
 import com.example.product.type.Category;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -92,6 +94,12 @@ public class ProductServiceImpl implements ProductService{
 
     @Override
     @Transactional
+    @Retryable(
+            maxRetries = 3,           // retry 3 times
+            delay = 100,              // wait 0.1s before retry
+            multiplier = 2.0,         // increase delay: 0.1s, 0.2s, 0.4s
+            includes = OptimisticLockException.class  // only for this reason
+    )
     public List<Product> reserveStock(Map<Long, Integer> reservationMap) {
         List<Long> idList = reservationMap.keySet().stream().toList();
         List<Product> productList = getProductList(idList);
@@ -114,6 +122,12 @@ public class ProductServiceImpl implements ProductService{
 
     @Override
     @Transactional
+    @Retryable(
+            maxRetries = 3,           // retry 3 times
+            delay = 100,              // wait 0.1s before retry
+            multiplier = 2.0,         // increase delay: 0.1s, 0.2s, 0.4s
+            includes = OptimisticLockException.class  // only for this reason
+    )
     public List<Product> cancelStock(Map<Long, Integer> reservationMap) {
         List<Long> idList = reservationMap.keySet().stream().toList();
         List<Product> productList = getProductList(idList);

@@ -9,6 +9,7 @@ import com.example.order.entity.OrderItem;
 import com.example.order.event.publisher.OrderEventPublisher;
 import com.example.order.repository.OrderRepository;
 import com.example.order.type.OrderStatus;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,7 +54,7 @@ public class OrderServiceImpl implements OrderService {
         //compute amount
         BigDecimal amount = itemList.stream().map(o -> o.getUnityPrice().multiply(BigDecimal.valueOf(o.getQuantity()))).reduce(BigDecimal::add).orElse(new BigDecimal(0));
         //persist order
-        Order order = new Order(null, itemList, customerOrder.email(), OrderStatus.PENDING, amount, null, null);
+        Order order = new Order(null, itemList, customerOrder.email(), OrderStatus.PENDING, amount, null, null, null);
         // Synchronize order and orderItem
         itemList.forEach(item -> item.setOrder(order));
         Order savedOrder = orderRepository.save(order);
@@ -66,12 +67,9 @@ public class OrderServiceImpl implements OrderService {
             groupId = "order-group")
     @Transactional
     public void onPaymentCompleted(PaymentCompletedEvent event) {
-        Order order = orderRepository.findById(event.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
         //payment is successful. We validate the order
         //commit done by dirty checking
-        order.setStatus(OrderStatus.CONFIRMED);
-
+        updateOrderStatus(event.getOrderId(), OrderStatus.CONFIRMED);
     }
 
     @KafkaListener(topics = "${kafka.topics.payment-failed}",
@@ -81,8 +79,6 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
         //payment is unsuccessful. We invalidate the order
-        //commit done by dirty checking
-        order.setStatus(OrderStatus.CANCELLED);
         //we need to release reserved stock
         cancelOrder(order.getId());
     }
@@ -108,8 +104,15 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
+    @Retryable(
+            maxRetries = 3,           // retry 3 times
+            delay = 100,              // wait 0.1s before retry
+            multiplier = 2.0,         // increase delay: 0.1s, 0.2s, 0.4s
+            includes = OptimisticLockException.class  // only for this reason
+    )
     public Order updateOrderStatus(Long id, OrderStatus status) {
-        Order order = this.orderRepository.findById(id).orElseThrow();
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", id)));
         //commit done by dirty checking
         order.setStatus(status);
         return order;

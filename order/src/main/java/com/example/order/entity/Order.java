@@ -55,4 +55,7 @@ public class Order {
 
     @CreatedDate
     private LocalDateTime updatedAt;
+
+    @Version  // auto increment manage by hibernate at each update - needed because status can be changed by concurrent topics
+    private Long version;
 }

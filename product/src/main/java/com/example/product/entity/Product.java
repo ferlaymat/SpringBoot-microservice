@@ -58,4 +58,7 @@ public class Product {
     @CreatedDate
     @Column(updatable = false)
     private LocalDateTime createdAt;
+
+    @Version  // auto increment manage by hibernate at each update - needed because stock can be changed by concurrent commands
+    private Long version;
 }
