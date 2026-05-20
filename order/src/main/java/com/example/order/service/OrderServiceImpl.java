@@ -9,6 +9,7 @@ import com.example.order.entity.OrderItem;
 import com.example.order.event.publisher.OrderEventPublisher;
 import com.example.order.repository.OrderRepository;
 import com.example.order.type.OrderStatus;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -44,6 +45,7 @@ public class OrderServiceImpl implements OrderService {
             delay = 500, //0.5s
             multiplier = 2.0 //0.5s, 1s, 2s
     )
+    @Transactional
     public Order createOrder(CustomerOrder customerOrder) {
         Map<Long, Integer> orderMap = customerOrder.orderItemMap();
         //call product to validate and reserve stock
@@ -62,22 +64,25 @@ public class OrderServiceImpl implements OrderService {
 
     @KafkaListener(topics = "${kafka.topics.payment-completed}",
             groupId = "order-group")
+    @Transactional
     public void onPaymentCompleted(PaymentCompletedEvent event) {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
         //payment is successful. We validate the order
+        //commit done by dirty checking
         order.setStatus(OrderStatus.CONFIRMED);
-        orderRepository.save(order);
+
     }
 
     @KafkaListener(topics = "${kafka.topics.payment-failed}",
             groupId = "order-group")
+    @Transactional
     public void onPaymentFailed(PaymentFailedEvent event) {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
         //payment is unsuccessful. We invalidate the order
+        //commit done by dirty checking
         order.setStatus(OrderStatus.CANCELLED);
-        orderRepository.save(order);
         //we need to release reserved stock
         cancelOrder(order.getId());
     }
@@ -102,10 +107,12 @@ public class OrderServiceImpl implements OrderService {
 
 
     @Override
+    @Transactional
     public Order updateOrderStatus(Long id, OrderStatus status) {
         Order order = this.orderRepository.findById(id).orElseThrow();
+        //commit done by dirty checking
         order.setStatus(status);
-        return this.orderRepository.save(order);
+        return order;
     }
 
     @Override
@@ -113,6 +120,7 @@ public class OrderServiceImpl implements OrderService {
             delay = 500, //0.5s
             multiplier = 2.0 //0.5s, 1s, 2s
     )
+    @Transactional
     public void cancelOrder(Long id) {
         //fetch all orderitems for this order
         List<OrderItem> orderItemList = this.orderItemService.findAllByOrderId(id);

@@ -3,6 +3,7 @@ package com.example.product.service;
 import com.example.product.entity.Product;
 import com.example.product.repository.ProductRepository;
 import com.example.product.type.Category;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -90,6 +91,7 @@ public class ProductServiceImpl implements ProductService{
     }
 
     @Override
+    @Transactional
     public List<Product> reserveStock(Map<Long, Integer> reservationMap) {
         List<Long> idList = reservationMap.keySet().stream().toList();
         List<Product> productList = getProductList(idList);
@@ -104,12 +106,14 @@ public class ProductServiceImpl implements ProductService{
                         String.format("Error: Not enough quantity available: {id:%s, available:%s, required:%s}", product.getId(), product.getStock(), item.getKey(), item.getValue()));
             }
             //update new item's quantity
+            //commit done by the dirty checking
             product.setStock(product.getStock() - item.getValue());
         }
-        return updateProductList(productList);
+        return productList;
     }
 
     @Override
+    @Transactional
     public List<Product> cancelStock(Map<Long, Integer> reservationMap) {
         List<Long> idList = reservationMap.keySet().stream().toList();
         List<Product> productList = getProductList(idList);
@@ -119,8 +123,9 @@ public class ProductServiceImpl implements ProductService{
         for (Map.Entry<Long, Integer>item : reservationMap.entrySet()) {
             Product product = productList.stream().filter(p -> p.getId() == item.getKey()).findFirst().get();
             //update new item's quantity
+            //commit done by the dirty checking
             product.setStock(product.getStock() + item.getValue());
         }
-        return updateProductList(productList);
+        return productList;
     }
 }
