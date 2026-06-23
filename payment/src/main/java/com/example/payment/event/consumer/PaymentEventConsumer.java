@@ -1,11 +1,8 @@
 package com.example.payment.event.consumer;
 
-import com.example.common.event.object.OrderCreatedEvent;
-import com.example.common.event.object.PaymentCompletedEvent;
-import com.example.common.event.object.PaymentFailedEvent;
+import com.example.common.event.object.StockReservedEvent;
 import com.example.payment.entity.Payment;
 import com.example.payment.service.PaymentService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
@@ -14,40 +11,27 @@ import org.springframework.stereotype.Component;
 public class PaymentEventConsumer {
 
     private final PaymentService paymentService;
+    private final PaymentEventPublisher paymentEventPublisher;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
 
-    @Value("${kafka.topics.payment-completed}")
-    private String paymentCompletedTopic;
-
-    @Value("${kafka.topics.payment-failed}")
-    private String paymentFailedTopic;
-
     public PaymentEventConsumer(PaymentService paymentService,
+                                PaymentEventPublisher paymentEventPublisher,
                                 KafkaTemplate<String, Object> kafkaTemplate) {
         this.paymentService = paymentService;
+        this.paymentEventPublisher = paymentEventPublisher;
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    @KafkaListener(topics = "${kafka.topics.order-created}", groupId = "payment-group")
-    public void onOrderCreated(OrderCreatedEvent event) {
+    @KafkaListener(topics = "${kafka.topics.stock-reserved}", groupId = "payment-group")
+    public void onStockReserved(StockReservedEvent event) {
         try {
             Payment payment = paymentService.processPayment(event);
-
-            PaymentCompletedEvent completed = new PaymentCompletedEvent();
-            completed.setOrderId(event.getOrderId());
-            completed.setPaymentId(payment.getId());
-
-            kafkaTemplate.send(paymentCompletedTopic,
-                event.getOrderId().toString(), completed);
+            paymentEventPublisher.publishPaymentCompleted(event.getOrderId(), payment.getId());
 
         } catch (Exception ex) {
-            PaymentFailedEvent failed = new PaymentFailedEvent();
-            failed.setOrderId(event.getOrderId());
-            failed.setReason(ex.getMessage());
 
-            kafkaTemplate.send(paymentFailedTopic,
-                event.getOrderId().toString(), failed);
+            paymentEventPublisher.publishPaymentFailed(event.getOrderId(), ex.getMessage());
         }
     }
 }

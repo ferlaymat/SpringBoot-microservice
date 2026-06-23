@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -36,9 +38,9 @@ public class ProductControllerTest {
     private final BigDecimal bd1 = new BigDecimal("300.0");
     private final BigDecimal bdMin = new BigDecimal("50.0");
     private final BigDecimal bdMax = new BigDecimal("500.0");
-    private final Product product = new Product(null, "nameTest", "descTest", bd1, 12, Category.ELECTRONICS, null);
-    private final Product productRes = new Product(1L, "nameTest", "descTest", bd1, 12, Category.ELECTRONICS, LocalDateTime.parse("2026-03-22T00:00:00"));
-    private final Product productRes2 = new Product(1L, "nameTest2", "descTest", bd1, 12, Category.ELECTRONICS, LocalDateTime.parse("2026-03-22T00:00:00"));
+    private final Product product = new Product(null, "nameTest", "descTest", bd1, 12, Category.ELECTRONICS, null, null);
+    private final Product productRes = new Product(1L, "nameTest", "descTest", bd1, 12, Category.ELECTRONICS, LocalDateTime.parse("2026-03-22T00:00:00"), null);
+    private final Product productRes2 = new Product(1L, "nameTest2", "descTest", bd1, 12, Category.ELECTRONICS, LocalDateTime.parse("2026-03-22T00:00:00"), null);
     private final String productString= new ObjectMapper().writeValueAsString(product);
     private final String productString2= new ObjectMapper().writeValueAsString(productRes2);
 
@@ -147,7 +149,8 @@ public class ProductControllerTest {
 
     @Test
     public void getAllProduct() throws Exception {
-        when(productService.getAllProduct()).thenReturn(List.of(productRes));
+        Page<Product> pagedResponse = new PageImpl<>(List.of(productRes));
+        when(productService.getAllProduct(0,10,"name", "asc")).thenReturn(pagedResponse);
         mvc.perform(get("/api/v1/product")
                         .contentType(MediaType.APPLICATION_JSON)).andExpect(status()
                         .isOk())

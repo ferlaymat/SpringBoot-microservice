@@ -30,8 +30,14 @@ spring:
 kafka:
   topics:
     order-created: order-created
+    order-cancelled: order-cancelled
     payment-completed: payment-completed
     payment-failed: payment-failed
+    payment-compensated: payment-compensated
+    stock-reserved: stock-reserved
+    stock-failed: stock-failed
+    stock-compensated: stock-compensated
+
 
 eureka:
   client:

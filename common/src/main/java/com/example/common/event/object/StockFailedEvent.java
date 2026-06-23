@@ -5,16 +5,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Map;
-
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
 @Setter
-public class OrderCreatedEvent {
+public class StockFailedEvent {
     private Long orderId;
-    private BigDecimal totalAmount;
-    private Map<Long, Integer> orderMap;
+    private String reason;
+
 }

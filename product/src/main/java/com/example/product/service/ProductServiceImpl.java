@@ -7,6 +7,9 @@ import jakarta.persistence.OptimisticLockException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
@@ -68,8 +71,13 @@ public class ProductServiceImpl implements ProductService{
     }
 
     @Override
-    public List<Product> getAllProduct() {
-        return productRepository.findAll();
+    public Page<Product> getAllProduct(
+            int page, int size, String sortBy, String sortOrder
+    ) {
+        Sort sort = sortOrder.equalsIgnoreCase("Desc") ?
+                Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        PageRequest pageable = PageRequest.of(page, size, sort);
+        return productRepository.findAll(pageable);
     }
 
     @Override

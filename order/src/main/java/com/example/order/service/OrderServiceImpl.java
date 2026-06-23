@@ -18,7 +18,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpEntity;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -63,8 +62,12 @@ public class OrderServiceImpl implements OrderService {
         return savedOrder;
     }
 
-    @KafkaListener(topics = "${kafka.topics.payment-completed}",
-            groupId = "order-group")
+
+    @Override
+    @Retryable(maxRetries = 3, //3 retry
+            delay = 500, //0.5s
+            multiplier = 2.0 //0.5s, 1s, 2s
+    )
     @Transactional
     public void onPaymentCompleted(PaymentCompletedEvent event) {
         //payment is successful. We validate the order
@@ -72,15 +75,20 @@ public class OrderServiceImpl implements OrderService {
         updateOrderStatus(event.getOrderId(), OrderStatus.CONFIRMED);
     }
 
-    @KafkaListener(topics = "${kafka.topics.payment-failed}",
-            groupId = "order-group")
+
+    @Override
+    @Retryable(maxRetries = 3, //3 retry
+            delay = 500, //0.5s
+            multiplier = 2.0 //0.5s, 1s, 2s
+    )
     @Transactional
     public void onPaymentFailed(PaymentFailedEvent event) {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
         //payment is unsuccessful. We invalidate the order
         //we need to release reserved stock
-        cancelOrder(order.getId());
+        Map<Long, Integer> cancelMap = cancelOrder(order.getId());
+        this.orderEventPublisher.publishOrderCancelled(order.getId(), event.getReason(), cancelMap);
     }
 
 
@@ -124,19 +132,21 @@ public class OrderServiceImpl implements OrderService {
             multiplier = 2.0 //0.5s, 1s, 2s
     )
     @Transactional
-    public void cancelOrder(Long id) {
+    public Map<Long, Integer> cancelOrder(Long id) {
+        Map<Long, Integer> cancelMap = null;
+        try{
         //fetch all orderitems for this order
         List<OrderItem> orderItemList = this.orderItemService.findAllByOrderId(id);
         //call product service to return products reserved
-        Map<Long, Integer> cancelMap = orderItemList.stream().collect(Collectors.toMap(OrderItem::getId, OrderItem::getQuantity));
-        HttpEntity<Map<Long, Integer>> body = new HttpEntity<>(cancelMap);
-        ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
-        };
-        restClient.put().uri("http://PRODUCT/api/v1/product/cancel")
-                .body(typeRef).retrieve().body(List.class);
-
+        cancelMap = orderItemList.stream().collect(Collectors.toMap(OrderItem::getId, OrderItem::getQuantity));
         //change status order
         updateOrderStatus(id, OrderStatus.CANCELLED);
+        } catch (Exception ex) {
+            log.error("CRITICAL: cancel order {} failed after Resilience4j retries",
+                    id, ex);
+            // TODO: Notification admin / Dead Letter Queue
+        }
+        return cancelMap;
     }
 
     /**
