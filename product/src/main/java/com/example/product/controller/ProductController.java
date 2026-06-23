@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -82,8 +83,11 @@ public class ProductController {
 
     @GetMapping
     @Operation(description = "Fetch all products from database")
-    public ResponseEntity<List<Product>> getAllProduct(){
-        return ResponseEntity.ok(productService.getAllProduct());
+    public ResponseEntity<Page<Product>> getAllProduct(@RequestParam(defaultValue = "0") int page,
+                                                       @RequestParam(defaultValue = "10") int size,
+                                                       @RequestParam(defaultValue = "name") String sortBy,
+                                                       @RequestParam(defaultValue = "asc") String sortOrder){
+        return ResponseEntity.ok(productService.getAllProduct(page, size,sortBy, sortOrder));
     }
 
     @PutMapping
@@ -112,11 +116,11 @@ public class ProductController {
         return ResponseEntity.ok().build();
     }
 
-    @PutMapping("/reserve")
+/*    @PutMapping("/reserve")
     @Operation(description = "Reserve specific quantity of products")
     public ResponseEntity<List<Product>> reserveStock(@Parameter(description = "Map of quantity by product id") @RequestBody Map<Long,Integer> reservationMap){
         return ResponseEntity.ok(productService.reserveStock(reservationMap));
-    }
+    }*/
 
     @PutMapping("/cancel")
     @Operation(description = "Return specific quantity of products after order cancellation")

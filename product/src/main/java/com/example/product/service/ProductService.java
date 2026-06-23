@@ -2,6 +2,7 @@ package com.example.product.service;
 
 import com.example.product.entity.Product;
 import com.example.product.type.Category;
+import org.springframework.data.domain.Page;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -28,7 +29,7 @@ public interface ProductService {
 
     List<Product> getProductByCreatedAtBetween(LocalDateTime minDate, LocalDateTime maxDate);
 
-    List<Product> getAllProduct();
+    Page<Product> getAllProduct(int page, int size, String sortBy, String sortOrder);
 
     Product updateProduct(Product product);
 

@@ -9,6 +9,8 @@ import com.example.order.entity.OrderItem;
 import com.example.order.event.publisher.OrderEventPublisher;
 import com.example.order.repository.OrderRepository;
 import com.example.order.type.OrderStatus;
+import jakarta.persistence.OptimisticLockException;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
@@ -16,7 +18,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpEntity;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -44,6 +45,7 @@ public class OrderServiceImpl implements OrderService {
             delay = 500, //0.5s
             multiplier = 2.0 //0.5s, 1s, 2s
     )
+    @Transactional
     public Order createOrder(CustomerOrder customerOrder) {
         Map<Long, Integer> orderMap = customerOrder.orderItemMap();
         //call product to validate and reserve stock
@@ -51,7 +53,7 @@ public class OrderServiceImpl implements OrderService {
         //compute amount
         BigDecimal amount = itemList.stream().map(o -> o.getUnityPrice().multiply(BigDecimal.valueOf(o.getQuantity()))).reduce(BigDecimal::add).orElse(new BigDecimal(0));
         //persist order
-        Order order = new Order(null, itemList, customerOrder.email(), OrderStatus.PENDING, amount, null, null);
+        Order order = new Order(null, itemList, customerOrder.email(), OrderStatus.PENDING, amount, null, null, null);
         // Synchronize order and orderItem
         itemList.forEach(item -> item.setOrder(order));
         Order savedOrder = orderRepository.save(order);
@@ -60,26 +62,33 @@ public class OrderServiceImpl implements OrderService {
         return savedOrder;
     }
 
-    @KafkaListener(topics = "${kafka.topics.payment-completed}",
-            groupId = "order-group")
+
+    @Override
+    @Retryable(maxRetries = 3, //3 retry
+            delay = 500, //0.5s
+            multiplier = 2.0 //0.5s, 1s, 2s
+    )
+    @Transactional
     public void onPaymentCompleted(PaymentCompletedEvent event) {
-        Order order = orderRepository.findById(event.getOrderId())
-                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
         //payment is successful. We validate the order
-        order.setStatus(OrderStatus.CONFIRMED);
-        orderRepository.save(order);
+        //commit done by dirty checking
+        updateOrderStatus(event.getOrderId(), OrderStatus.CONFIRMED);
     }
 
-    @KafkaListener(topics = "${kafka.topics.payment-failed}",
-            groupId = "order-group")
+
+    @Override
+    @Retryable(maxRetries = 3, //3 retry
+            delay = 500, //0.5s
+            multiplier = 2.0 //0.5s, 1s, 2s
+    )
+    @Transactional
     public void onPaymentFailed(PaymentFailedEvent event) {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
         //payment is unsuccessful. We invalidate the order
-        order.setStatus(OrderStatus.CANCELLED);
-        orderRepository.save(order);
         //we need to release reserved stock
-        cancelOrder(order.getId());
+        Map<Long, Integer> cancelMap = cancelOrder(order.getId());
+        this.orderEventPublisher.publishOrderCancelled(order.getId(), event.getReason(), cancelMap);
     }
 
 
@@ -102,10 +111,19 @@ public class OrderServiceImpl implements OrderService {
 
 
     @Override
+    @Transactional
+    @Retryable(
+            maxRetries = 3,           // retry 3 times
+            delay = 100,              // wait 0.1s before retry
+            multiplier = 2.0,         // increase delay: 0.1s, 0.2s, 0.4s
+            includes = OptimisticLockException.class  // only for this reason
+    )
     public Order updateOrderStatus(Long id, OrderStatus status) {
-        Order order = this.orderRepository.findById(id).orElseThrow();
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", id)));
+        //commit done by dirty checking
         order.setStatus(status);
-        return this.orderRepository.save(order);
+        return order;
     }
 
     @Override
@@ -113,19 +131,22 @@ public class OrderServiceImpl implements OrderService {
             delay = 500, //0.5s
             multiplier = 2.0 //0.5s, 1s, 2s
     )
-    public void cancelOrder(Long id) {
+    @Transactional
+    public Map<Long, Integer> cancelOrder(Long id) {
+        Map<Long, Integer> cancelMap = null;
+        try{
         //fetch all orderitems for this order
         List<OrderItem> orderItemList = this.orderItemService.findAllByOrderId(id);
         //call product service to return products reserved
-        Map<Long, Integer> cancelMap = orderItemList.stream().collect(Collectors.toMap(OrderItem::getId, OrderItem::getQuantity));
-        HttpEntity<Map<Long, Integer>> body = new HttpEntity<>(cancelMap);
-        ParameterizedTypeReference<List<ProductDto>> typeRef = new ParameterizedTypeReference<>() {
-        };
-        restClient.put().uri("http://PRODUCT/api/v1/product/cancel")
-                .body(typeRef).retrieve().body(List.class);
-
+        cancelMap = orderItemList.stream().collect(Collectors.toMap(OrderItem::getId, OrderItem::getQuantity));
         //change status order
         updateOrderStatus(id, OrderStatus.CANCELLED);
+        } catch (Exception ex) {
+            log.error("CRITICAL: cancel order {} failed after Resilience4j retries",
+                    id, ex);
+            // TODO: Notification admin / Dead Letter Queue
+        }
+        return cancelMap;
     }
 
     /**

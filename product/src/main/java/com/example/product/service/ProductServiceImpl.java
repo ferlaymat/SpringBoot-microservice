@@ -3,8 +3,14 @@ package com.example.product.service;
 import com.example.product.entity.Product;
 import com.example.product.repository.ProductRepository;
 import com.example.product.type.Category;
+import jakarta.persistence.OptimisticLockException;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -65,8 +71,13 @@ public class ProductServiceImpl implements ProductService{
     }
 
     @Override
-    public List<Product> getAllProduct() {
-        return productRepository.findAll();
+    public Page<Product> getAllProduct(
+            int page, int size, String sortBy, String sortOrder
+    ) {
+        Sort sort = sortOrder.equalsIgnoreCase("Desc") ?
+                Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        PageRequest pageable = PageRequest.of(page, size, sort);
+        return productRepository.findAll(pageable);
     }
 
     @Override
@@ -90,6 +101,13 @@ public class ProductServiceImpl implements ProductService{
     }
 
     @Override
+    @Transactional
+    @Retryable(
+            maxRetries = 3,           // retry 3 times
+            delay = 100,              // wait 0.1s before retry
+            multiplier = 2.0,         // increase delay: 0.1s, 0.2s, 0.4s
+            includes = OptimisticLockException.class  // only for this reason
+    )
     public List<Product> reserveStock(Map<Long, Integer> reservationMap) {
         List<Long> idList = reservationMap.keySet().stream().toList();
         List<Product> productList = getProductList(idList);
@@ -104,12 +122,20 @@ public class ProductServiceImpl implements ProductService{
                         String.format("Error: Not enough quantity available: {id:%s, available:%s, required:%s}", product.getId(), product.getStock(), item.getKey(), item.getValue()));
             }
             //update new item's quantity
+            //commit done by the dirty checking
             product.setStock(product.getStock() - item.getValue());
         }
-        return updateProductList(productList);
+        return productList;
     }
 
     @Override
+    @Transactional
+    @Retryable(
+            maxRetries = 3,           // retry 3 times
+            delay = 100,              // wait 0.1s before retry
+            multiplier = 2.0,         // increase delay: 0.1s, 0.2s, 0.4s
+            includes = OptimisticLockException.class  // only for this reason
+    )
     public List<Product> cancelStock(Map<Long, Integer> reservationMap) {
         List<Long> idList = reservationMap.keySet().stream().toList();
         List<Product> productList = getProductList(idList);
@@ -119,8 +145,9 @@ public class ProductServiceImpl implements ProductService{
         for (Map.Entry<Long, Integer>item : reservationMap.entrySet()) {
             Product product = productList.stream().filter(p -> p.getId() == item.getKey()).findFirst().get();
             //update new item's quantity
+            //commit done by the dirty checking
             product.setStock(product.getStock() + item.getValue());
         }
-        return updateProductList(productList);
+        return productList;
     }
 }
