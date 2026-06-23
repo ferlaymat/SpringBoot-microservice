@@ -1,7 +1,8 @@
-package com.example.order.event.publisher;
+package com.example.order.event.consumer;
 
 import com.example.common.event.object.PaymentCompletedEvent;
 import com.example.common.event.object.PaymentFailedEvent;
+import com.example.common.event.object.StockCompensatedEvent;
 import com.example.order.service.OrderService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -31,7 +32,7 @@ public class OrderEventConsumer {
         orderService.onPaymentCompleted(event);
 
         } catch (Exception ex) {
-            log.error("CRITICAL: complet order {} failed after Resilience4j retries",
+            log.error("CRITICAL: completion order {} failed after Resilience4j retries",
                     event.getOrderId(), ex);
             // TODO: Notification admin / Dead Letter Queue
         }
@@ -41,5 +42,17 @@ public class OrderEventConsumer {
     public void onPaymentFailed(PaymentFailedEvent event) {
 
             orderService.onPaymentFailed(event);
+    }
+
+    @KafkaListener(topics = "${kafka.topics.payment-completed}", groupId = "order-group")
+    public void onStockCompensated(StockCompensatedEvent event) {
+        try {
+            orderService.onStockCompensated(event);
+
+        } catch (Exception ex) {
+            log.error("CRITICAL: compensated order {} failed after Resilience4j retries",
+                    event.getOrderId(), ex);
+            // TODO: Notification admin / Dead Letter Queue
+        }
     }
 }

@@ -1,12 +1,9 @@
-package com.example.payment.event.consumer;
+package com.example.payment.event.publisher;
 
 import com.example.common.event.object.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
-import java.util.Map;
 
 @Component
 public class PaymentEventPublisher {

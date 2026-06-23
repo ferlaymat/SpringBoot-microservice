@@ -1,3 +1,0 @@
-com\example\common\event\object\OrderCreatedEvent.class
-com\example\common\event\object\PaymentCompletedEvent.class
-com\example\common\event\object\PaymentFailedEvent.class

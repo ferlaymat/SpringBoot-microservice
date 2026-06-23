@@ -2,6 +2,7 @@ package com.example.order.service;
 
 import com.example.common.event.object.PaymentCompletedEvent;
 import com.example.common.event.object.PaymentFailedEvent;
+import com.example.common.event.object.StockCompensatedEvent;
 import com.example.order.dto.CustomerOrder;
 import com.example.order.dto.ProductDto;
 import com.example.order.entity.Order;
@@ -9,7 +10,6 @@ import com.example.order.entity.OrderItem;
 import com.example.order.event.publisher.OrderEventPublisher;
 import com.example.order.repository.OrderRepository;
 import com.example.order.type.OrderStatus;
-import jakarta.persistence.OptimisticLockException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -82,6 +82,19 @@ public class OrderServiceImpl implements OrderService {
             multiplier = 2.0 //0.5s, 1s, 2s
     )
     @Transactional
+    public void onStockCompensated(StockCompensatedEvent event) {
+        //payment is cancelled. We invalidate the order
+        //commit done by dirty checking
+        updateOrderStatus(event.getOrderId(), OrderStatus.CANCELLED);
+    }
+
+
+    @Override
+    @Retryable(maxRetries = 3, //3 retry
+            delay = 500, //0.5s
+            multiplier = 2.0 //0.5s, 1s, 2s
+    )
+    @Transactional
     public void onPaymentFailed(PaymentFailedEvent event) {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", event.getOrderId())));
@@ -92,39 +105,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
 
-    @Override
-    public Order getOrderById(Long id) {
-        return orderRepository.findOrderByIdWithItems(id);
-    }
 
-    @Override
-    public Page<Order> getOrderByCustomer(int page, int size, String sorBy, String sortOrder, String email) {
-        var pageable = getPageable(page, size, sorBy, sortOrder);
-        return orderRepository.findAllOrdersByEmailWithItems(email, pageable);
-    }
-
-    @Override
-    public Page<Order> getAllOrders(int page, int size, String sorBy, String sortOrder) {
-        var pageable = getPageable(page, size, sorBy, sortOrder);
-        return orderRepository.findAllOrdersWithItems(pageable);
-    }
-
-
-    @Override
-    @Transactional
-    @Retryable(
-            maxRetries = 3,           // retry 3 times
-            delay = 100,              // wait 0.1s before retry
-            multiplier = 2.0,         // increase delay: 0.1s, 0.2s, 0.4s
-            includes = OptimisticLockException.class  // only for this reason
-    )
-    public Order updateOrderStatus(Long id, OrderStatus status) {
-        Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", id)));
-        //commit done by dirty checking
-        order.setStatus(status);
-        return order;
-    }
 
     @Override
     @Retryable(maxRetries = 3, //3 retry
@@ -134,13 +115,13 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public Map<Long, Integer> cancelOrder(Long id) {
         Map<Long, Integer> cancelMap = null;
-        try{
-        //fetch all orderitems for this order
-        List<OrderItem> orderItemList = this.orderItemService.findAllByOrderId(id);
-        //call product service to return products reserved
-        cancelMap = orderItemList.stream().collect(Collectors.toMap(OrderItem::getId, OrderItem::getQuantity));
-        //change status order
-        updateOrderStatus(id, OrderStatus.CANCELLED);
+        try {
+            //fetch all orderitems for this order
+            List<OrderItem> orderItemList = this.orderItemService.findAllByOrderId(id);
+            //call product service to return products reserved
+            cancelMap = orderItemList.stream().collect(Collectors.toMap(OrderItem::getId, OrderItem::getQuantity));
+            //change status order
+            updateOrderStatus(id, OrderStatus.CANCELLED);
         } catch (Exception ex) {
             log.error("CRITICAL: cancel order {} failed after Resilience4j retries",
                     id, ex);
@@ -187,5 +168,32 @@ public class OrderServiceImpl implements OrderService {
                 Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
         var pageable = PageRequest.of(page, size, sort);
         return pageable;
+    }
+
+
+    //TODO Admin method. create admin controller or remove these functions
+/*    private Order getOrderById(Long id) {
+        return orderRepository.findOrderByIdWithItems(id);
+    }
+
+
+    private Page<Order> getOrderByCustomer(int page, int size, String sorBy, String sortOrder, String email) {
+        var pageable = getPageable(page, size, sorBy, sortOrder);
+        return orderRepository.findAllOrdersByEmailWithItems(email, pageable);
+    }
+
+
+    private Page<Order> getAllOrders(int page, int size, String sorBy, String sortOrder) {
+        var pageable = getPageable(page, size, sorBy, sortOrder);
+        return orderRepository.findAllOrdersWithItems(pageable);
+    }*/
+
+
+    private Order updateOrderStatus(Long id, OrderStatus status) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException(String.format("Order %s not found", id)));
+        //commit done by dirty checking
+        order.setStatus(status);
+        return order;
     }
 }

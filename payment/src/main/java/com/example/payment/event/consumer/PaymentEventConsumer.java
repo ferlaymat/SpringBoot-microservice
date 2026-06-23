@@ -2,6 +2,7 @@ package com.example.payment.event.consumer;
 
 import com.example.common.event.object.StockReservedEvent;
 import com.example.payment.entity.Payment;
+import com.example.payment.event.publisher.PaymentEventPublisher;
 import com.example.payment.service.PaymentService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;

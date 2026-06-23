@@ -1,4 +1,4 @@
-package com.example.product.publisher;
+package com.example.product.event.publisher;
 
 import com.example.common.event.object.StockCompensatedEvent;
 import com.example.common.event.object.StockFailedEvent;

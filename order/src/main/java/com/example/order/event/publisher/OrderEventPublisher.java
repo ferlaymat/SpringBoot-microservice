@@ -41,7 +41,7 @@ public class OrderEventPublisher {
         event.setOrderId(orderId);
         event.setReason(reason);
         event.setOrderMap(cancelMap);
-        kafkaTemplate.send(orderCreatedTopic,
+        kafkaTemplate.send(orderCancelledTopic,
                 String.valueOf(orderId), event);
     }
 }
